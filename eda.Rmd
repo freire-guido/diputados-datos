@@ -111,9 +111,11 @@ Armo colormap de bloques, visualizo y coloreo el MDS.
 col_blo = c("#56B4E9", "#F0E442", "#CC79A7", "#D55E00", "#999999", "#0072B2", "#E69F00", "red", "#009E73"); names(col_blo) = actasbloques$BLOQUE
 scale_bloque = scale_color_manual("BLOQUE", values = col_blo, labels = c("FRENTE DE TODOS", "FRENTE PRO", "ID. BONAERENSE", "UCR", "NA", "COALICION CIVICA", "EVOLUCION RADICAL", "FRENTE DE IZQUIERDA", "FRENTE MISIONERO")); rm(col_blo)
 
+theme_blank = theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank())
+
 adyacencia_dip = cbind(actaslargo[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], cmdscale(dist(actaslargo)))
 colnames(adyacencia_dip) = c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE", "X", "Y")
-ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque
+ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank
 ```
 
 Repito por bloque:
@@ -121,16 +123,37 @@ Repito por bloque:
 ```{r}
 adyacencia_blo = cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques), 1))
 colnames(adyacencia_blo) = c("BLOQUE", "X")
-ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme(legend.key.width = unit(0.0001, 'cm'))
+ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank
 ```
-
 
 Hermosho. Seria piola visualizar la evolucion de las distancias con el tiempo.
 
 ```{r}
+library(plotly)
 
+actascabe = (read.csv("data/actascabe2.csv") %>% bind_rows(read.csv("data/actascabe1.csv")))[, c("acta_id", "fecha")]
+actascabe$fecha = as.Date(actascabe$fecha)
+
+actas_f = actas %>% left_join(actascabe, by = "acta_id")
+actasbloques_f = actas_f %>% pivot_wider(id_cols = BLOQUE,
+                                         names_from = fecha,
+                                         values_from = voto,
+                                         values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
+actasbloques_f = filter(actasbloques_f, rowSums(is.na(actasbloques_f)) < (1 - presentismo)*length(actasbloques_f))
+actasbloques_f[, 2:ncol(actasbloques_f)][is.na(actasbloques_f[, 2:ncol(actasbloques_f)])] = 0
+
+adyacencia_f = NULL
+
+distancia = 0
+for (col in 2:ncol(actasbloques_f)) {
+  distancia = distancia + dist(actasbloques_f[, col])
+  adyacencia_f = adyacencia_f %>% bind_rows(cbind(as.data.frame(actasbloques_f$BLOQUE), cmdscale(distancia, 1), colnames(actasbloques_f)[col]))
+}
+
+colnames(adyacencia_f) = c("BLOQUE", "X", "FECHA")
+
+plot_ly(adyacencia_f, x = ~X, y = 1, color = ~BLOQUE, frame = ~FECHA)
 ```
-
 
 ---
 
