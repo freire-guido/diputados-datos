@@ -1,0 +1,79 @@
+---
+title: "EDA datos diputados"
+output: html_notebook
+---
+
+
+
+```{r}
+library('tidyr')
+library('dplyr')
+library('ggplot2')
+
+actas1 = read.csv('data/actas1.csv')
+actas2 = read.csv('data/actas2.csv')
+bloques = read.csv('data/bloques.csv')
+integracion = read.csv('data/integracion.csv')
+```
+
+Como voy a estar trabajando principalmente con la integracion de los bloques, me interesa saber cuan congruentes son las distintas bases de datos
+
+```{r}
+length(unique(actas1$bloque))
+length(unique(actas2$bloque))
+nrow(bloques)
+```
+
+Hay bastante lio con la cantidad de bloques y lo que se detalla en integracion - bloques. Fusiono los datos
+
+```{r}
+actas = actas1 %>% bind_rows(actas2)
+
+rm(actas1); rm(actas2)
+
+
+integracion$DIPUTADO_APELLIDO_Y_NOMBRE = gsub(',', '', integracion$DIPUTADO_APELLIDO_Y_NOMBRE)
+actas = rename(actas, DIPUTADO_APELLIDO_Y_NOMBRE = diputado_nombre)
+
+actas = actas %>% filter(DIPUTADO_APELLIDO_Y_NOMBRE != "")
+
+integracion_boost = (actas
+                     %>% inner_join(integracion[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], by = "DIPUTADO_APELLIDO_Y_NOMBRE")
+                     )[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "bloque", "BLOQUE")] %>% distinct()
+
+integracion_boost = integracion_boost %>% group_by(bloque) %>% summarise(BLOQUE = names(which.max(table(BLOQUE))))
+```
+
+Asocie diputados a BLOQUES, que indirectamente me asocio BLOQUES a bloques. A partir de eso arme un integracion_boost que relaciona bloques a BLOQUES - fusiono todo en asociaciones para que me quede una relacion DIPUTADO_APELLIDO_Y_NOMBRE -> BLOQUE. Veo cuantos NA me puedo sacar de encima usando el boost.
+
+```{r}
+asociaciones = (actas %>%
+    left_join(integracion[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], by = "DIPUTADO_APELLIDO_Y_NOMBRE") %>%
+    left_join(integracion_boost, by = "bloque") %>%
+    mutate(BLOQUE = ifelse(!is.na(BLOQUE.y), BLOQUE.y, BLOQUE.x)) %>% 
+    filter(!is.na(BLOQUE)))[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")] %>% 
+  distinct()
+
+
+actas = actas %>% left_join(asociaciones, by = "DIPUTADO_APELLIDO_Y_NOMBRE")
+actas = actas[, !(names(actas) %in% c("acta_detalle_id", "persona_id"))] # aprovecho para sacar columnas redundantes
+
+print(paste("Votos sin partido:", nrow(actas[is.na(actas$BLOQUE),])))
+```
+
+Hay cuatro veces menos votos sin partido, el ds es lo mas potable posible. Se viene el exploratorio!
+
+```{r}
+afirmativos = actas %>% group_by(acta_id) %>% summarise(afirmativos = sum(voto == "AFIRMATIVO")/length(voto)*100)
+ggplot(afirmativos, aes(acta_id, afirmativos)) + geom_hline(aes(yintercept = 50, color = "red")) + geom_point() + coord_cartesian(xlim = c(0, 500), ylim = c(0, 100)) + theme(legend.position = "none")
+```
+
+```{r}
+actas %>% ggplot(aes(BLOQUE, fill = voto)) + geom_bar(position = "fill")
+```
+
+Es provechoso visualizar las distancias entre cada diputado en el espacio de votos. Mappeo los votos a valores continuos.
+
+```{r}
+actas %>% ggplot(aes(DIPUTADO_APELLIDO_Y_NOMBRE, fill = voto)) + geom_bar(position = "fill")
+```
