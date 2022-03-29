@@ -1,6 +1,8 @@
 ---
 title: "EDA datos diputados"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 
@@ -57,6 +59,7 @@ asociaciones = (actas %>%
 
 actas = actas %>% left_join(asociaciones, by = "DIPUTADO_APELLIDO_Y_NOMBRE")
 actas = actas[, !(names(actas) %in% c("acta_detalle_id", "persona_id"))] # aprovecho para sacar columnas redundantes
+write.csv(actas, "data/actas.csv")
 
 print(paste("Votos sin partido:", nrow(actas[is.na(actas$BLOQUE),])))
 ```
@@ -81,26 +84,69 @@ actas %>% ggplot(aes(DIPUTADO_APELLIDO_Y_NOMBRE, fill = voto)) + geom_bar(positi
 Quiero visualizar si hay alguna clusterizacion en base a las distancias en el espacio de votaciones. Mappeo los votos a valores Reales y presento la data en formato ancho.
 
 ```{r}
-actas = distinct(actas)
-
 votomap = list(AFIRMATIVO = 1, NEGATIVO = -1, ABSTENCION = 0, AUSENTE = NA)
-actaslargo = actas %>% pivot_wider(id_cols = c(DIPUTADO_APELLIDO_Y_NOMBRE, BLOQUE), names_from = acta_id, values_from = voto, values_fn = ~unlist(votomap[.x]))
 
+actaslargo = actas %>% pivot_wider(id_cols = c(DIPUTADO_APELLIDO_Y_NOMBRE, BLOQUE), names_from = acta_id, values_from = voto, values_fn = ~unlist(votomap[.x]))
 write.csv(actaslargo, "data/actaslargo.csv")
 ```
 
 Ahora filtro diputados con bajo presentismo.
 
 ```{r}
-presentismo = 0.5
+presentismo = 0.55
+
 actaslargo = actaslargo %>% filter(rowSums(is.na(actaslargo)) < (1 - presentismo)*length(actaslargo))
 ```
 
-Armo colormap de asociaciones diputado -> bloque, visualizo y coloreo el MDS.
+Repito esto por bloque, en lugar de por diputado:
 
 ```{r}
-distancias = actaslargo %>% dist()
-ggplot(as.data.frame(cmdscale(distancias)), aes(V1, V2, color = actaslargo$BLOQUE)) + geom_point()
+actasbloques = actas %>% pivot_wider(id_cols = BLOQUE, names_from = acta_id, values_from = voto, values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
+actasbloques = filter(actasbloques, rowSums(is.na(actasbloques)) < (1 - presentismo)*length(actasbloques))
 ```
 
-Hermosho
+Armo colormap de bloques, visualizo y coloreo el MDS.
+
+```{r}
+col_blo = c("#56B4E9", "#F0E442", "#CC79A7", "#D55E00", "#999999", "#0072B2", "#E69F00", "red", "#009E73"); names(col_blo) = actasbloques$BLOQUE
+scale_bloque = scale_color_manual("BLOQUE", values = col_blo, labels = c("FRENTE DE TODOS", "FRENTE PRO", "ID. BONAERENSE", "UCR", "NA", "COALICION CIVICA", "EVOLUCION RADICAL", "FRENTE DE IZQUIERDA", "FRENTE MISIONERO")); rm(col_blo)
+
+adyacencia_dip = cbind(actaslargo[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], cmdscale(dist(actaslargo)))
+colnames(adyacencia_dip) = c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE", "X", "Y")
+ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque
+```
+
+Repito por bloque:
+
+```{r}
+adyacencia_blo = cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques), 1))
+colnames(adyacencia_blo) = c("BLOQUE", "X")
+ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme(legend.key.width = unit(0.0001, 'cm'))
+```
+
+
+Hermosho. Seria piola visualizar la evolucion de las distancias con el tiempo.
+
+```{r}
+
+```
+
+
+---
+
+```{r}
+library(arules) 
+library(arulesViz)
+
+actrans = actas %>% select(-bloque) %>% mutate_each(as.factor)
+trans = transactions(actrans)
+rules = apriori(trans, supp = 0.1, conf = 0.3)
+
+inspectDT(rules)
+```
+
+```{r}
+plot(rules, method = "graph", interactive = T, engine = "htmlwidget")
+```
+
+
