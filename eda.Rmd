@@ -77,3 +77,30 @@ Es provechoso visualizar las distancias entre cada diputado en el espacio de vot
 ```{r}
 actas %>% ggplot(aes(DIPUTADO_APELLIDO_Y_NOMBRE, fill = voto)) + geom_bar(position = "fill")
 ```
+
+Quiero visualizar si hay alguna clusterizacion en base a las distancias en el espacio de votaciones. Mappeo los votos a valores Reales y presento la data en formato ancho.
+
+```{r}
+actas = distinct(actas)
+
+votomap = list(AFIRMATIVO = 1, NEGATIVO = -1, ABSTENCION = 0, AUSENTE = NA)
+actaslargo = actas %>% pivot_wider(id_cols = c(DIPUTADO_APELLIDO_Y_NOMBRE, BLOQUE), names_from = acta_id, values_from = voto, values_fn = ~unlist(votomap[.x]))
+
+write.csv(actaslargo, "data/actaslargo.csv")
+```
+
+Ahora filtro diputados con bajo presentismo.
+
+```{r}
+presentismo = 0.5
+actaslargo = actaslargo %>% filter(rowSums(is.na(actaslargo)) < (1 - presentismo)*length(actaslargo))
+```
+
+Armo colormap de asociaciones diputado -> bloque, visualizo y coloreo el MDS.
+
+```{r}
+distancias = actaslargo %>% dist()
+ggplot(as.data.frame(cmdscale(distancias)), aes(V1, V2, color = actaslargo$BLOQUE)) + geom_point()
+```
+
+Hermosho
