@@ -92,8 +92,7 @@ write.csv(actaslargo, "data/actaslargo.csv")
 Ahora filtro diputados con bajo presentismo.
 
 ```{r}
-presentismo <- 0.6
-
+presentismo <- 0.5
 actaslargo <- actaslargo %>% filter(rowSums(is.na(actaslargo)) < (1 - presentismo)*length(actaslargo))
 ```
 
@@ -117,19 +116,25 @@ colnames(adyacencia_dip) <- c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE", "X", "Y")
 ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank + labs(title = "Distancias entre diputados", subtitle = "usando Minkowski")
 ```
 
-Repito por bloque:
+Quiero una nocion de tamanio para la visualizacion por bloque, manos a la obra:
 
 ```{r}
-adyacencia_blo <- cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques, method = "minkowski"), 1))
-colnames(adyacencia_blo) <- c("BLOQUE", "X")
-ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank + labs(title = "Distancias entre bloques", subtitle = "usando Minkowski")
+# actasbloques_t <- as.data.frame(with(actas, table(BLOQUE, acta_id))) %>% pivot_wider(id_cols = BLOQUE, names_from = acta_id, values_from = Freq)
+actasbloques_t <- actas %>% pivot_wider(id_cols = BLOQUE, names_from = acta_id, values_from = voto, values_fn = length)
+actasbloques_t <- filter(actasbloques_t, rowSums(is.na(actasbloques_t)) < (1 - presentismo)*length(actasbloques_t))
+```
+
+Ahora si, visualizo por bloque!
+
+```{r}
+adyacencia_blo <- cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques, method = "minkowski"), 2), actasbloques_t[, ncol(actasbloques_t)])
+colnames(adyacencia_blo) <- c("BLOQUE", "X", "Y", "N")
+ggplot(adyacencia_blo, aes(X, Y, color = BLOQUE, size = N)) + geom_point() + scale_bloque + theme_blank + labs(title = "Distancias entre bloques", subtitle = "usando Minkowski")
 ```
 
 Hermosho. Seria piola visualizar la evolucion de las distancias con el tiempo.
 
 ```{r}
-library(plotly)
-
 actascabe <- (read.csv("data/actascabe2.csv") %>% bind_rows(read.csv("data/actascabe1.csv")))[, c("acta_id", "fecha")]
 actascabe$fecha <- as.Date(actascabe$fecha)
 
@@ -140,12 +145,24 @@ actasbloques_f <- actas_f %>% pivot_wider(id_cols = BLOQUE,
                                          values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
 actasbloques_f <- filter(actasbloques_f, rowSums(is.na(actasbloques_f)) < (1 - presentismo)*length(actasbloques_f))
 actasbloques_f[, 2:ncol(actasbloques_f)][is.na(actasbloques_f[, 2:ncol(actasbloques_f)])] <- 0
+```
+
+Ahora tengo, para cada fecha, el valor medio de "apoyo" por bloque para las actas de esa fecha. Uso un grafico animado para el periodo que corresponde a la gestion de Mauricio Macri. 
+
+```{r}
+library(plotly)
+
+duranteMacrismo = function(d) {
+  return(as.Date("2015-12-10") <= d & d <= as.Date("2019-12-10") )
+}
 
 adyacencia_f <- NULL
 distancia <- 0
 for (col in 2:ncol(actasbloques_f)) {
-  distancia <- distancia + dist(actasbloques_f[, col])
-  adyacencia_f <- adyacencia_f %>% bind_rows(cbind(as.data.frame(actasbloques_f$BLOQUE), cmdscale(distancia, 1), colnames(actasbloques_f)[col]))
+  if (duranteMacrismo(as.Date(colnames(actasbloques_f)[col]))) {
+    distancia <- distancia + dist(actasbloques_f[, col], method = "minkowski")
+    adyacencia_f <- adyacencia_f %>% bind_rows(cbind(as.data.frame(actasbloques_f$BLOQUE), cmdscale(distancia, 1), colnames(actasbloques_f)[col]))
+  }
 }
 
 colnames(adyacencia_f) <- c("BLOQUE", "X", "FECHA")
