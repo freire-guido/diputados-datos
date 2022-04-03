@@ -8,14 +8,14 @@ output:
 
 
 ```{r}
-library('tidyr')
-library('dplyr')
-library('ggplot2')
+library("tidyr")
+library("dplyr")
+library("ggplot2")
 
-actas1 = read.csv('data/actas1.csv')
-actas2 = read.csv('data/actas2.csv')
-bloques = read.csv('data/bloques.csv')
-integracion = read.csv('data/integracion.csv')
+actas1 <- read.csv("data/actas1.csv")
+actas2 <- read.csv("data/actas2.csv")
+bloques <- read.csv("data/bloques.csv")
+integracion <- read.csv("data/integracion.csv")
 ```
 
 Como voy a estar trabajando principalmente con la integracion de los bloques, me interesa saber cuan congruentes son las distintas bases de datos
@@ -29,36 +29,35 @@ nrow(bloques)
 Hay bastante lio con la cantidad de bloques y lo que se detalla en integracion - bloques. Fusiono los datos
 
 ```{r}
-actas = actas1 %>% bind_rows(actas2)
+actas <- actas1 %>% bind_rows(actas2)
 
 rm(actas1); rm(actas2)
 
 
-integracion$DIPUTADO_APELLIDO_Y_NOMBRE = gsub(',', '', integracion$DIPUTADO_APELLIDO_Y_NOMBRE)
-actas = rename(actas, DIPUTADO_APELLIDO_Y_NOMBRE = diputado_nombre)
+integracion$DIPUTADO_APELLIDO_Y_NOMBRE <- gsub(",", "", integracion$DIPUTADO_APELLIDO_Y_NOMBRE)
+actas <- rename(actas, DIPUTADO_APELLIDO_Y_NOMBRE = diputado_nombre)
 
-actas = actas %>% filter(DIPUTADO_APELLIDO_Y_NOMBRE != "")
+actas <- actas %>% filter(DIPUTADO_APELLIDO_Y_NOMBRE != "")
 
-integracion_boost = (actas
-                     %>% inner_join(integracion[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], by = "DIPUTADO_APELLIDO_Y_NOMBRE")
+integracion_boost <- (actas
+                     %>% inner_join(integracion[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], by <- "DIPUTADO_APELLIDO_Y_NOMBRE")
                      )[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "bloque", "BLOQUE")] %>% distinct()
 
-integracion_boost = integracion_boost %>% group_by(bloque) %>% summarise(BLOQUE = names(which.max(table(BLOQUE))))
+integracion_boost <- integracion_boost %>% group_by(bloque) %>% summarise(BLOQUE = names(which.max(table(BLOQUE))))
 ```
 
 Asocie diputados a BLOQUES, que indirectamente me asocio BLOQUES a bloques. A partir de eso arme un integracion_boost que relaciona bloques a BLOQUES - fusiono todo en asociaciones para que me quede una relacion DIPUTADO_APELLIDO_Y_NOMBRE -> BLOQUE. Veo cuantos NA me puedo sacar de encima usando el boost.
 
 ```{r}
-asociaciones = (actas %>%
+asociaciones <- (actas %>%
     left_join(integracion[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], by = "DIPUTADO_APELLIDO_Y_NOMBRE") %>%
     left_join(integracion_boost, by = "bloque") %>%
     mutate(BLOQUE = ifelse(!is.na(BLOQUE.y), BLOQUE.y, BLOQUE.x)) %>% 
     filter(!is.na(BLOQUE)))[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")] %>% 
   distinct()
 
-
-actas = actas %>% left_join(asociaciones, by = "DIPUTADO_APELLIDO_Y_NOMBRE")
-actas = actas[, !(names(actas) %in% c("acta_detalle_id", "persona_id"))] # aprovecho para sacar columnas redundantes
+actas <- actas %>% left_join(asociaciones, by = "DIPUTADO_APELLIDO_Y_NOMBRE")
+actas <- actas[, !(names(actas) %in% c("acta_detalle_id", "persona_id"))] # aprovecho para sacar columnas redundantes
 write.csv(actas, "data/actas.csv")
 
 print(paste("Votos sin partido:", nrow(actas[is.na(actas$BLOQUE),])))
@@ -67,8 +66,8 @@ print(paste("Votos sin partido:", nrow(actas[is.na(actas$BLOQUE),])))
 Hay cuatro veces menos votos sin partido, el ds es lo mas potable posible. Se viene el exploratorio!
 
 ```{r}
-afirmativos = actas %>% group_by(acta_id) %>% summarise(afirmativos = sum(voto == "AFIRMATIVO")/length(voto)*100)
-ggplot(afirmativos, aes(acta_id, afirmativos)) + geom_hline(aes(yintercept = 50, color = "red")) + geom_point() + coord_cartesian(xlim = c(0, 500), ylim = c(0, 100)) + theme(legend.position = "none")
+afirmativos <- actas %>% group_by(acta_id) %>% summarise(afirmativos = sum(voto == "AFIRMATIVO")/length(voto)*100)
+ggplot(afirmativos, aes(acta_id, afirmativos)) + geom_hline(aes(yintercept = 50, color <- "red")) + geom_point() + coord_cartesian(xlim = c(0, 500), ylim = c(0, 100)) + theme(legend.position = "none")
 ```
 
 ```{r}
@@ -84,46 +83,46 @@ actas %>% ggplot(aes(DIPUTADO_APELLIDO_Y_NOMBRE, fill = voto)) + geom_bar(positi
 Quiero visualizar si hay alguna clusterizacion en base a las distancias en el espacio de votaciones. Mappeo los votos a valores Reales y presento la data en formato ancho.
 
 ```{r}
-votomap = list(AFIRMATIVO = 1, NEGATIVO = -1, ABSTENCION = 0, AUSENTE = NA)
+votomap <- list(AFIRMATIVO = 1, NEGATIVO = -1, ABSTENCION = 0, AUSENTE = NA)
 
-actaslargo = actas %>% pivot_wider(id_cols = c(DIPUTADO_APELLIDO_Y_NOMBRE, BLOQUE), names_from = acta_id, values_from = voto, values_fn = ~unlist(votomap[.x]))
+actaslargo <- actas %>% pivot_wider(id_cols = c(DIPUTADO_APELLIDO_Y_NOMBRE, BLOQUE), names_from = acta_id, values_from = voto, values_fn = ~unlist(votomap[.x]))
 write.csv(actaslargo, "data/actaslargo.csv")
 ```
 
 Ahora filtro diputados con bajo presentismo.
 
 ```{r}
-presentismo = 0.55
+presentismo <- 0.6
 
-actaslargo = actaslargo %>% filter(rowSums(is.na(actaslargo)) < (1 - presentismo)*length(actaslargo))
+actaslargo <- actaslargo %>% filter(rowSums(is.na(actaslargo)) < (1 - presentismo)*length(actaslargo))
 ```
 
 Repito esto por bloque, en lugar de por diputado:
 
 ```{r}
-actasbloques = actas %>% pivot_wider(id_cols = BLOQUE, names_from = acta_id, values_from = voto, values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
-actasbloques = filter(actasbloques, rowSums(is.na(actasbloques)) < (1 - presentismo)*length(actasbloques))
+actasbloques <- actas %>% pivot_wider(id_cols = BLOQUE, names_from = acta_id, values_from = voto, values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
+actasbloques <- filter(actasbloques, rowSums(is.na(actasbloques)) < (1 - presentismo)*length(actasbloques))
 ```
 
 Armo colormap de bloques, visualizo y coloreo el MDS.
 
 ```{r}
-col_blo = c("#56B4E9", "#F0E442", "#CC79A7", "#D55E00", "#999999", "#0072B2", "#E69F00", "red", "#009E73"); names(col_blo) = actasbloques$BLOQUE
-scale_bloque = scale_color_manual("BLOQUE", values = col_blo, labels = c("FRENTE DE TODOS", "FRENTE PRO", "ID. BONAERENSE", "UCR", "NA", "COALICION CIVICA", "EVOLUCION RADICAL", "FRENTE DE IZQUIERDA", "FRENTE MISIONERO")); rm(col_blo)
+col_blo <- c("#56B4E9", "#F0E442", "#CC79A7", "#D55E00", "#999999", "#0072B2", "#E69F00", "red", "#009E73"); names(col_blo) <- actasbloques$BLOQUE
+scale_bloque <- scale_color_manual("BLOQUE", values = col_blo, labels = c("FRENTE DE TODOS", "FRENTE PRO", "ID. BONAERENSE", "UCR", "NA", "COALICION CIVICA", "EVOLUCION RADICAL", "FRENTE DE IZQUIERDA", "FRENTE MISIONERO")); rm(col_blo)
 
-theme_blank = theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank())
+theme_blank <- theme(axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank())
 
-adyacencia_dip = cbind(actaslargo[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], cmdscale(dist(actaslargo)))
-colnames(adyacencia_dip) = c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE", "X", "Y")
-ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank
+adyacencia_dip <- cbind(actaslargo[, c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE")], cmdscale(dist(actaslargo, method = "minkowski")))
+colnames(adyacencia_dip) <- c("DIPUTADO_APELLIDO_Y_NOMBRE", "BLOQUE", "X", "Y")
+ggplot(adyacencia_dip, aes(X, Y, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank + labs(title = "Distancias entre diputados", subtitle = "usando Minkowski")
 ```
 
 Repito por bloque:
 
 ```{r}
-adyacencia_blo = cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques), 1))
-colnames(adyacencia_blo) = c("BLOQUE", "X")
-ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank
+adyacencia_blo <- cbind(as.data.frame(actasbloques$BLOQUE), cmdscale(dist(actasbloques, method = "minkowski"), 1))
+colnames(adyacencia_blo) <- c("BLOQUE", "X")
+ggplot(adyacencia_blo, aes(X, 1, color = BLOQUE)) + geom_point() + scale_bloque + theme_blank + labs(title = "Distancias entre bloques", subtitle = "usando Minkowski")
 ```
 
 Hermosho. Seria piola visualizar la evolucion de las distancias con el tiempo.
@@ -131,28 +130,27 @@ Hermosho. Seria piola visualizar la evolucion de las distancias con el tiempo.
 ```{r}
 library(plotly)
 
-actascabe = (read.csv("data/actascabe2.csv") %>% bind_rows(read.csv("data/actascabe1.csv")))[, c("acta_id", "fecha")]
-actascabe$fecha = as.Date(actascabe$fecha)
+actascabe <- (read.csv("data/actascabe2.csv") %>% bind_rows(read.csv("data/actascabe1.csv")))[, c("acta_id", "fecha")]
+actascabe$fecha <- as.Date(actascabe$fecha)
 
-actas_f = actas %>% left_join(actascabe, by = "acta_id")
-actasbloques_f = actas_f %>% pivot_wider(id_cols = BLOQUE,
+actas_f <- actas %>% left_join(actascabe, by <- "acta_id") %>% arrange(desc(fecha))
+actasbloques_f <- actas_f %>% pivot_wider(id_cols = BLOQUE,
                                          names_from = fecha,
                                          values_from = voto,
                                          values_fn = ~mean(unlist(votomap[.x]), na.rm = T))
-actasbloques_f = filter(actasbloques_f, rowSums(is.na(actasbloques_f)) < (1 - presentismo)*length(actasbloques_f))
-actasbloques_f[, 2:ncol(actasbloques_f)][is.na(actasbloques_f[, 2:ncol(actasbloques_f)])] = 0
+actasbloques_f <- filter(actasbloques_f, rowSums(is.na(actasbloques_f)) < (1 - presentismo)*length(actasbloques_f))
+actasbloques_f[, 2:ncol(actasbloques_f)][is.na(actasbloques_f[, 2:ncol(actasbloques_f)])] <- 0
 
-adyacencia_f = NULL
-
-distancia = 0
+adyacencia_f <- NULL
+distancia <- 0
 for (col in 2:ncol(actasbloques_f)) {
-  distancia = distancia + dist(actasbloques_f[, col])
-  adyacencia_f = adyacencia_f %>% bind_rows(cbind(as.data.frame(actasbloques_f$BLOQUE), cmdscale(distancia, 1), colnames(actasbloques_f)[col]))
+  distancia <- distancia + dist(actasbloques_f[, col])
+  adyacencia_f <- adyacencia_f %>% bind_rows(cbind(as.data.frame(actasbloques_f$BLOQUE), cmdscale(distancia, 1), colnames(actasbloques_f)[col]))
 }
 
-colnames(adyacencia_f) = c("BLOQUE", "X", "FECHA")
+colnames(adyacencia_f) <- c("BLOQUE", "X", "FECHA")
 
-plot_ly(adyacencia_f, x = ~X, y = 1, color = ~BLOQUE, frame = ~FECHA)
+plot_ly(adyacencia_f, x = ~X, y = 0, color = ~BLOQUE, frame = ~FECHA)
 ```
 
 ---
@@ -161,9 +159,9 @@ plot_ly(adyacencia_f, x = ~X, y = 1, color = ~BLOQUE, frame = ~FECHA)
 library(arules) 
 library(arulesViz)
 
-actrans = actas %>% select(-bloque) %>% mutate_each(as.factor)
-trans = transactions(actrans)
-rules = apriori(trans, supp = 0.1, conf = 0.3)
+actrans <- actas %>% select(-bloque) %>% mutate_each(as.factor)
+trans <- transactions(actrans)
+rules <- apriori(trans, supp = 0.1, conf = 0.3)
 
 inspectDT(rules)
 ```
